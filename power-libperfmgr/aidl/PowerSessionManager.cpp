@@ -197,6 +197,18 @@ void PowerSessionManager<HintManagerT>::setThreadsFromPowerSession(
         int64_t sessionId, const std::vector<int32_t> &threadIds) {
     std::vector<pid_t> addedThreads;
     std::vector<pid_t> removedThreads;
+    bool wasActive = false;
+
+    {
+        std::lock_guard<std::mutex> lock(mSessionTaskMapMutex);
+        auto sessValPtr = mSessionTaskMap.findSession(sessionId);
+        if (sessValPtr == nullptr) {
+            return;
+        }
+
+        wasActive = sessValPtr->isActive;
+    }
+
     forceSessionActive(sessionId, false);
     {
         std::lock_guard<std::mutex> lock(mSessionTaskMapMutex);
@@ -215,7 +227,7 @@ void PowerSessionManager<HintManagerT>::setThreadsFromPowerSession(
             ALOGE("Failed to remove task profiles for tid:%d", tid);
         }
     }
-    forceSessionActive(sessionId, true);
+    forceSessionActive(sessionId, wasActive);
 }
 
 template <class HintManagerT>
