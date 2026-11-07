@@ -25,6 +25,7 @@
 #include <private/android_filesystem_config.h>
 #include <processgroup/processgroup.h>
 #include <sys/syscall.h>
+#include <unistd.h>
 #include <utils/Trace.h>
 
 #include "AdpfTypes.h"
@@ -694,6 +695,20 @@ void PowerSessionManager<HintManagerT>::updateHboostStatistics(int64_t sessionId
 template <class HintManagerT>
 std::vector<std::string> PowerSessionManager<HintManagerT>::getSessionTaskProfiles(int64_t sessionId,
                                                                      bool isSetProfile) const {
+    static const bool supportsSchedQos = [] {
+        for (const auto *profile : {"SCHED_QOS_SENSITIVE_STANDARD", "SCHED_QOS_SENSITIVE_EXTREME",
+                                    "SCHED_QOS_NONE"}) {
+            if (!isProfileValidForProcess(profile, getuid(), getpid())) {
+                ALOGI("ADPF scheduler QoS profiles unavailable; using uclamp only");
+                return false;
+            }
+        }
+        return true;
+    }();
+    if (!supportsSchedQos) {
+        return {};
+    }
+
     auto sessValPtr = mSessionTaskMap.findSession(sessionId);
     if (isSetProfile) {
         if (nullptr == sessValPtr) {
@@ -705,8 +720,13 @@ std::vector<std::string> PowerSessionManager<HintManagerT>::getSessionTaskProfil
             switch (sessValPtr->tag) {
                 case SessionTag::SURFACEFLINGER:
                     if (HintManagerT::GetInstance()->GetOtherConfigs().enableSFPreferHighCap &&
-                        !powerhal::flags::ramp_down_sf_prefer_high_cap())
-                        return {"SCHED_QOS_SENSITIVE_EXTREME", "PreferHighCapSet"};
+                        !powerhal::flags::ramp_down_sf_prefer_high_cap()) {
+                        static const bool supportsPreferHighCap =
+                                isProfileValidForProcess("PreferHighCapSet", getuid(), getpid());
+                        if (supportsPreferHighCap) {
+                            return {"SCHED_QOS_SENSITIVE_EXTREME", "PreferHighCapSet"};
+                        }
+                    }
                     return {"SCHED_QOS_SENSITIVE_EXTREME"};
                 case SessionTag::HWUI:
                     return {"SCHED_QOS_SENSITIVE_EXTREME"};

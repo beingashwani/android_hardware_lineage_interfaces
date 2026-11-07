@@ -21,8 +21,9 @@
 #include <android/binder_ibinder_platform.h>
 #include <android/binder_manager.h>
 #include <android/binder_process.h>
-#include <processgroup/processgroup.h>
 #include <perfmgr/HintManager.h>
+#include <processgroup/processgroup.h>
+#include <unistd.h>
 
 #include <thread>
 
@@ -49,8 +50,9 @@ int main() {
     }
 
     // set task profile "PreferIdle" to lower scheduling latency.
-    if (!SetTaskProfiles(0, {"PreferIdleSet"})) {
-        LOG(WARNING) << "Device does not support 'PreferIdleSet' task profile.";
+    if (isProfileValidForProcess("PreferIdleSet", getuid(), getpid()) &&
+        !SetTaskProfiles(0, {"PreferIdleSet"})) {
+        LOG(WARNING) << "Failed to apply 'PreferIdleSet' task profile.";
     }
 
     // single thread
