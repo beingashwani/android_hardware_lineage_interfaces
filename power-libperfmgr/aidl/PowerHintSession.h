@@ -63,6 +63,7 @@ class PowerHintSession : public BnPowerHintSession, public Immobile {
     ndk::ScopedAStatus updateTargetWorkDuration(int64_t targetDurationNanos) override;
     ndk::ScopedAStatus reportActualWorkDuration(
             const std::vector<WorkDuration> &actualDurations) override;
+    void reportActualWorkDurationFromChannel(const std::vector<WorkDuration> &actualDurations);
     ndk::ScopedAStatus sendHint(SessionHint hint) override;
     ndk::ScopedAStatus setMode(SessionMode mode, bool enabled) override;
     ndk::ScopedAStatus setThreads(const std::vector<int32_t> &threadIds) override;
@@ -94,6 +95,8 @@ class PowerHintSession : public BnPowerHintSession, public Immobile {
     const std::shared_ptr<AdpfConfig> getAdpfProfile() const;
     ndk::ScopedAStatus setModeLocked(SessionMode mode, bool enabled)
             REQUIRES(mPowerHintSessionLock);
+    ndk::ScopedAStatus reportActualWorkDurationLocked(
+            const std::vector<WorkDuration> &actualDurations) REQUIRES(mPowerHintSessionLock);
 
     // Data
     PowerSessionManagerT *mPSManager;

@@ -192,7 +192,14 @@ void ChannelGroup<PowerSessionManagerT, PowerHintSessionT>::runChannelGroup() {
                                                 durationData.workPeriodStartTimestampNanos});
                             }
                             if (!durations.empty()) {
-                                sessionPtr->reportActualWorkDuration(durations);
+                                if constexpr (requires {
+                                                  sessionPtr->reportActualWorkDurationFromChannel(
+                                                          durations);
+                                              }) {
+                                    sessionPtr->reportActualWorkDurationFromChannel(durations);
+                                } else {
+                                    sessionPtr->reportActualWorkDuration(durations);
+                                }
                                 // Decrement the message index so we don't skip the next item
                                 --messageIndex;
                             }

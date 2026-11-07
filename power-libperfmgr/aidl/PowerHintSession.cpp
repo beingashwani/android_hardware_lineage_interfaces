@@ -426,6 +426,22 @@ template <class HintManagerT, class PowerSessionManagerT>
 ndk::ScopedAStatus PowerHintSession<HintManagerT, PowerSessionManagerT>::reportActualWorkDuration(
         const std::vector<WorkDuration> &actualDurations) {
     std::scoped_lock lock{mPowerHintSessionLock};
+    return reportActualWorkDurationLocked(actualDurations);
+}
+
+template <class HintManagerT, class PowerSessionManagerT>
+void PowerHintSession<HintManagerT, PowerSessionManagerT>::reportActualWorkDurationFromChannel(
+        const std::vector<WorkDuration> &actualDurations) {
+    std::scoped_lock lock{mPowerHintSessionLock};
+    if (mSessionClosed || !mDescriptor->is_active.load()) {
+        return;
+    }
+    reportActualWorkDurationLocked(actualDurations);
+}
+
+template <class HintManagerT, class PowerSessionManagerT>
+ndk::ScopedAStatus PowerHintSession<HintManagerT, PowerSessionManagerT>::reportActualWorkDurationLocked(
+        const std::vector<WorkDuration> &actualDurations) {
     if (mSessionClosed) {
         ALOGE("Error: session is dead");
         return ndk::ScopedAStatus::fromExceptionCode(EX_ILLEGAL_STATE);
