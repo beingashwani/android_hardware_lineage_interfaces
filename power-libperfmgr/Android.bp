@@ -30,6 +30,7 @@ cc_binary {
         "libbinder_ndk",
         "libcutils",
         "libdl",
+        "libjsoncpp",
         "liblog",
         "libperfmgr",
         "libprocessgroup",

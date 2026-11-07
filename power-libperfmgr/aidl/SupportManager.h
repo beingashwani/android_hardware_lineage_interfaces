@@ -16,6 +16,8 @@
 
 #pragma once
 
+#include <string>
+
 #include "AdpfTypes.h"
 
 namespace aidl::google::hardware::power::impl::pixel {
@@ -23,6 +25,7 @@ namespace aidl::google::hardware::power::impl::pixel {
 class SupportManager {
   public:
     static SupportInfo makeSupportInfo();
+    static bool hasTaskProfile(const std::string &name);
 
   private:
     static bool getAdfpSupported();

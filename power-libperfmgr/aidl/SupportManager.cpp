@@ -16,11 +16,18 @@
 
 #include "SupportManager.h"
 
+#include <android-base/file.h>
+#include <android-base/logging.h>
+#include <android-base/properties.h>
+#include <json/json.h>
 #include <perfmgr/HintManager.h>
 
 #include <bitset>
+#include <cerrno>
 #include <map>
+#include <memory>
 #include <type_traits>
+#include <unordered_set>
 
 #include "AdpfTypes.h"
 
@@ -116,6 +123,65 @@ std::map<Boost, int32_t> kBoostEarliestVersionMap = kBoostEarliestVersion;
 std::map<SessionHint, int32_t> kSessionHintEarliestVersionMap = kSessionHintEarliestVersion;
 std::map<SessionMode, int32_t> kSessionModeEarliestVersionMap = kSessionModeEarliestVersion;
 std::map<SessionTag, int32_t> kSessionTagEarliestVersionMap = kSessionTagEarliestVersion;
+
+bool SupportManager::hasTaskProfile(const std::string &name) {
+    struct ProfileDefinitions {
+        std::unordered_set<std::string> names;
+        bool complete = true;
+    };
+    static const auto profiles = [] {
+        ProfileDefinitions definitions;
+        const auto load = [&](const std::string &path, bool optional) {
+            std::string contents;
+            if (!::android::base::ReadFileToString(path, &contents)) {
+                if (!optional || errno != ENOENT) {
+                    LOG(WARNING) << "Unable to inspect task profiles from " << path;
+                    definitions.complete = false;
+                }
+                return;
+            }
+            Json::CharReaderBuilder builder;
+            std::unique_ptr<Json::CharReader> reader(builder.newCharReader());
+            Json::Value root;
+            std::string error;
+            if (!reader->parse(contents.data(), contents.data() + contents.size(), &root, &error) ||
+                !root.isObject()) {
+                LOG(WARNING) << "Unable to parse task profiles from " << path;
+                definitions.complete = false;
+                return;
+            }
+            for (const auto *group : {"Profiles", "AggregateProfiles"}) {
+                const auto &entries = root[group];
+                if (entries.isNull()) {
+                    continue;
+                }
+                if (!entries.isArray()) {
+                    definitions.complete = false;
+                    continue;
+                }
+                for (const auto &profile : entries) {
+                    if (!profile.isObject() || !profile["Name"].isString()) {
+                        definitions.complete = false;
+                        continue;
+                    }
+                    definitions.names.insert(profile["Name"].asString());
+                }
+            }
+        };
+        load("/etc/task_profiles.json", false);
+        const auto apiLevel =
+                ::android::base::GetUintProperty<unsigned int>("ro.product.first_api_level", 0);
+        if (apiLevel > 0) {
+            load("/etc/task_profiles/task_profiles_" + std::to_string(apiLevel) + ".json", true);
+        }
+        load("/vendor/etc/task_profiles.json", true);
+        if (!definitions.complete) {
+            LOG(WARNING) << "Task profile inspection incomplete; preserving profile application";
+        }
+        return definitions;
+    }();
+    return !profiles.complete || profiles.names.contains(name);
+}
 
 SupportInfo SupportManager::makeSupportInfo() {
     SupportInfo out;

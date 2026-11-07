@@ -31,6 +31,7 @@
 #include "AdpfTypes.h"
 #include "AppDescriptorTrace.h"
 #include "AppHintDesc.h"
+#include "SupportManager.h"
 #include "tests/mocks/MockHintManager.h"
 #include "utils/ThermalStateListener.h"
 
@@ -693,50 +694,34 @@ void PowerSessionManager<HintManagerT>::updateHboostStatistics(int64_t sessionId
 }
 
 template <class HintManagerT>
-std::vector<std::string> PowerSessionManager<HintManagerT>::getSessionTaskProfiles(int64_t sessionId,
-                                                                     bool isSetProfile) const {
-    static const bool supportsSchedQos = [] {
-        for (const auto *profile : {"SCHED_QOS_SENSITIVE_STANDARD", "SCHED_QOS_SENSITIVE_EXTREME",
-                                    "SCHED_QOS_NONE"}) {
-            if (!isProfileValidForProcess(profile, getuid(), getpid())) {
-                ALOGI("ADPF scheduler QoS profiles unavailable; using uclamp only");
-                return false;
-            }
-        }
-        return true;
-    }();
-    if (!supportsSchedQos) {
-        return {};
+std::vector<std::string> PowerSessionManager<HintManagerT>::getSessionTaskProfiles(
+        int64_t sessionId, bool isSetProfile) const {
+    const bool supportsSchedQos = SupportManager::hasTaskProfile("SCHED_QOS_NONE");
+    if (!isSetProfile) {
+        return supportsSchedQos ? std::vector<std::string>{"SCHED_QOS_NONE"}
+                                : std::vector<std::string>{};
     }
 
-    auto sessValPtr = mSessionTaskMap.findSession(sessionId);
-    if (isSetProfile) {
-        if (nullptr == sessValPtr) {
-            return {"SCHED_QOS_SENSITIVE_STANDARD"};
-        }
-        if (sessValPtr->procTag == ProcessTag::SYSTEM_UI) {
-            return {"SCHED_QOS_SENSITIVE_EXTREME"};
-        } else {
-            switch (sessValPtr->tag) {
-                case SessionTag::SURFACEFLINGER:
-                    if (HintManagerT::GetInstance()->GetOtherConfigs().enableSFPreferHighCap &&
-                        !powerhal::flags::ramp_down_sf_prefer_high_cap()) {
-                        static const bool supportsPreferHighCap =
-                                isProfileValidForProcess("PreferHighCapSet", getuid(), getpid());
-                        if (supportsPreferHighCap) {
-                            return {"SCHED_QOS_SENSITIVE_EXTREME", "PreferHighCapSet"};
-                        }
-                    }
-                    return {"SCHED_QOS_SENSITIVE_EXTREME"};
-                case SessionTag::HWUI:
-                    return {"SCHED_QOS_SENSITIVE_EXTREME"};
-                default:
-                    return {"SCHED_QOS_SENSITIVE_STANDARD"};
-            }
-        }
-    } else {
-        return {"SCHED_QOS_NONE"};
+    std::lock_guard<std::mutex> lock(mSessionTaskMapMutex);
+    auto session = mSessionTaskMap.findSession(sessionId);
+    const bool useExtreme = session != nullptr &&
+                            (session->procTag == ProcessTag::SYSTEM_UI ||
+                             session->tag == SessionTag::SURFACEFLINGER ||
+                             session->tag == SessionTag::HWUI);
+    const std::string qosProfile =
+            useExtreme ? "SCHED_QOS_SENSITIVE_EXTREME" : "SCHED_QOS_SENSITIVE_STANDARD";
+    std::vector<std::string> profiles;
+    if (supportsSchedQos && SupportManager::hasTaskProfile(qosProfile)) {
+        profiles.push_back(qosProfile);
     }
+    if (session != nullptr && session->procTag != ProcessTag::SYSTEM_UI &&
+        session->tag == SessionTag::SURFACEFLINGER &&
+        HintManagerT::GetInstance()->GetOtherConfigs().enableSFPreferHighCap &&
+        !powerhal::flags::ramp_down_sf_prefer_high_cap() &&
+        SupportManager::hasTaskProfile("PreferHighCapSet")) {
+        profiles.push_back("PreferHighCapSet");
+    }
+    return profiles;
 }
 
 template <class HintManagerT>

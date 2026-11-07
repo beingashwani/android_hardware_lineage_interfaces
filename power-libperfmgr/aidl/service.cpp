@@ -23,18 +23,19 @@
 #include <android/binder_process.h>
 #include <perfmgr/HintManager.h>
 #include <processgroup/processgroup.h>
-#include <unistd.h>
 
 #include <thread>
 
 #include "MetricUploader.h"
 #include "Power.h"
 #include "PowerExt.h"
+#include "SupportManager.h"
 #include "utils/ThermalStateListener.h"
 
 using aidl::google::hardware::power::impl::pixel::MetricUploader;
 using aidl::google::hardware::power::impl::pixel::Power;
 using aidl::google::hardware::power::impl::pixel::PowerExt;
+using aidl::google::hardware::power::impl::pixel::SupportManager;
 using aidl::google::hardware::power::impl::pixel::ThermalStateListener;
 using ::android::perfmgr::HintManager;
 
@@ -50,7 +51,7 @@ int main() {
     }
 
     // set task profile "PreferIdle" to lower scheduling latency.
-    if (isProfileValidForProcess("PreferIdleSet", getuid(), getpid()) &&
+    if (SupportManager::hasTaskProfile("PreferIdleSet") &&
         !SetTaskProfiles(0, {"PreferIdleSet"})) {
         LOG(WARNING) << "Failed to apply 'PreferIdleSet' task profile.";
     }
